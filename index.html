@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#10131b">
+<title>RefCut — Reference Video Editor</title>
+<style>
+:root{color-scheme:dark;--bg:#10131b;--panel:#191e2a;--line:#30394b;--text:#f4f6fb;--muted:#a8b2c5;--accent:#8b7cff;--green:#58d6a1}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:22px 16px 16px;background:linear-gradient(135deg,#22213e,#10131b)}h1{margin:0;font-size:26px}header p{color:var(--muted);margin:6px 0 0;line-height:1.45}.wrap{max-width:850px;margin:auto;padding:14px;display:grid;gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}h2{font-size:17px;margin:0 0 10px}.hint{color:var(--muted);font-size:13px;line-height:1.5}
+label.upload{display:flex;min-height:92px;border:1px dashed #606b83;border-radius:12px;align-items:center;justify-content:center;text-align:center;padding:14px;cursor:pointer;background:#141925}
+input[type=file]{display:none}button{border:0;border-radius:11px;background:var(--accent);color:white;font-weight:700;padding:12px 15px;font-size:14px;cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}.secondary{background:#30394b}.green{background:#18885f}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.stat{background:#111620;border-radius:10px;padding:10px}.stat b{display:block;font-size:18px}.stat span{color:var(--muted);font-size:12px}.list{display:grid;gap:8px;margin-top:10px}.item{display:flex;gap:10px;align-items:center;background:#111620;padding:10px;border-radius:10px;min-width:0}.item span{overflow-wrap:anywhere;flex:1;font-size:13px}.item small{color:var(--muted)}video{width:100%;max-height:330px;background:#050609;border-radius:10px;margin-top:10px}canvas{display:none}.bar{height:7px;background:#30394b;border-radius:8px;overflow:hidden;margin:10px 0}.bar div{height:100%;width:0;background:var(--green)}.notice{padding:11px;border-radius:10px;background:#25233b;color:#dcd8ff;font-size:13px;line-height:1.5}.warn{color:#ffcf8c}.hidden{display:none!important}footer{text-align:center;color:var(--muted);font-size:12px;padding:6px 16px 25px}a{color:#c3bcff}
+</style>
+</head>
+<body>
+<header><div class="wrap" style="padding:0 14px"><h1>🎬 RefCut</h1><p>Free reference-pattern video editor · Runs locally in your browser · No account or paid API</p></div></header>
+<main class="wrap">
+<section class="card">
+<h2>1. Add your reference video</h2>
+<label class="upload" for="refFile"><div><b>Tap to choose reference video</b><div class="hint">MP4, WebM or another format supported by your browser</div></div></label>
+<input id="refFile" type="file" accept="video/*">
+<div id="refInfo" class="hint" style="margin-top:10px">No reference selected yet.</div>
+<video id="refPreview" controls playsinline class="hidden"></video>
+<div class="row" style="margin-top:12px"><button id="analyzeBtn" disabled>Analyze reference pattern</button></div>
+<div id="analysisStatus" class="hint" style="margin-top:8px">Analysis estimates the reference duration and samples visual changes to suggest cut points.</div>
+<div class="statgrid"><div class="stat"><b id="refDuration">—</b><span>Reference length</span></div><div class="stat"><b id="cutCount">—</b><span>Suggested segments</span></div><div class="stat"><b id="ratio">—</b><span>Aspect ratio</span></div></div>
+<div id="cuts" class="list"></div>
+</section>
+<section class="card">
+<h2>2. Add your own clips</h2>
+<label class="upload" for="clipsFile"><div><b>Tap to select one or more clips</b><div class="hint">Select clips in the order you want them used</div></div></label>
+<input id="clipsFile" type="file" accept="video/*" multiple>
+<div id="clipsList" class="list"><div class="hint">No clips selected yet.</div></div>
+</section>
+<section class="card">
+<h2>3. Build a matching edit</h2>
+<p class="hint">The first version matches total duration and approximate segment lengths. It does not clone the reference's exact effects, captions, music, or transitions.</p>
+<div class="row">
+<label class="hint">Output format
+<select id="format" style="display:block;margin-top:5px;padding:10px;background:#111620;color:white;border:1px solid #30394b;border-radius:9px;width:160px">
+<option value="portrait">Vertical 9:16</option><option value="landscape">Landscape 16:9</option><option value="square">Square 1:1</option><option value="reference">Match reference shape</option>
+</select></label>
+<label class="hint">Render quality
+<select id="quality" style="display:block;margin-top:5px;padding:10px;background:#111620;color:white;border:1px solid #30394b;border-radius:9px">
+<option value="720">720p (recommended)</option><option value="480">480p (faster)</option><option value="1080">1080p (may be heavy)</option>
+</select></label>
+</div>
+<div class="row" style="margin-top:14px"><button id="buildBtn" disabled>Build edit plan</button><button id="previewBtn" class="secondary" disabled>Preview edit</button><button id="exportBtn" class="green" disabled>Export video</button></div>
+<div id="plan" class="list"></div>
+<div id="renderStatus" class="hint" style="margin-top:8px"></div>
+<div class="bar"><div id="progress"></div></div>
+<canvas id="stage" width="720" height="1280"></canvas>
+<video id="outputPreview" controls playsinline class="hidden"></video>
+<a id="download" class="hidden" style="display:inline-block;margin-top:12px" download="refcut-export.webm">Download exported video</a>
+</section>
+<section class="card">
+<h2>What this free prototype can and cannot do</h2>
+<div class="notice">✓ Local file selection · reference duration and aspect ratio · rough visual-change sampling · segment timing plan · browser-based preview/export where supported.<br><br>⚠️ It cannot guarantee exact style cloning. Export is a silent video (no source audio), uses browser-supported WebM encoding, and may fail on large files or browsers without MediaRecorder support. Keep the screen awake during export.</div>
+<p class="hint">Privacy: selected videos are processed in this page and are not intentionally uploaded to a server. Refreshing the page clears the current session.</p>
+</section>
+</main>
+<footer>RefCut prototype · Free and experimental · For videos you have permission to edit</footer>
+<script>
+const $=id=>document.getElementById(id);
+let refFile=null, refURL=null, refMeta=null, refCuts=[], clips=[], plan=[], outURL=null, rendering=false;
+const fmt=s=>{if(!Number.isFinite(s))return "—";let m=Math.floor(s/60),r=Math.floor(s%60);return `${m}:${String(r).padStart(2,"0")}`};
+const prettyBytes=n=>n<1048576?Math.round(n/1024)+" KB":(n/1048576).toFixed(1)+" MB";
+function loadMeta(file){return new Promise((resolve,reject)=>{let v=document.createElement("video");v.preload="metadata";v.muted=true;v.onloadedmetadata=()=>resolve({duration:v.duration,width:v.videoWidth,height:v.videoHeight});v.onerror=()=>reject(Error("This video format could not be read by your browser."));v.src=URL.createObjectURL(file)})}
+$("refFile").addEventListener("change",async e=>{
+ const f=e.target.files[0];if(!f)return;refFile=f;$("refInfo").textContent="Reading video…";
+ try{refMeta=await loadMeta(f);if(refURL)URL.revokeObjectURL(refURL);refURL=URL.createObjectURL(f);$("refPreview").src=refURL;$("refPreview").classList.remove("hidden");$("refInfo").textContent=`${f.name} · ${prettyBytes(f.size)} · ${refMeta.width}×${refMeta.height}`;$("refDuration").textContent=fmt(refMeta.duration);$("ratio").textContent=refMeta.width>refMeta.height?"Landscape":refMeta.width<refMeta.height?"Portrait":"Square";$("analyzeBtn").disabled=false;$("analysisStatus").textContent="Ready to analyze.";}catch(err){$("refInfo").textContent=err.message}
+});
+$("analyzeBtn").onclick=async()=>{
+ if(!refURL||!refMeta)return;const btn=$("analyzeBtn");btn.disabled=true;$("analysisStatus").textContent="Sampling frames… keep this tab open.";
+ try{
+  const v=$("refPreview"), c=document.createElement("canvas"),ctx=c.getContext("2d",{willReadFrequently:true});c.width=48;c.height=48;
+  const duration=refMeta.duration, samples=Math.min(60,Math.max(8,Math.floor(duration*1.5))), frames=[]; 
+  for(let i=0;i<samples;i++){let t=Math.min(Math.max(0.05,duration-0.05),duration*(i/(samples-1)));await seek(v,t);ctx.drawImage(v,0,0,48,48);let data=ctx.getImageData(0,0,48,48).data;let arr=[];for(let j=0;j<data.length;j+=4)arr.push((data[j]+data[j+1]+data[j+2])/3);frames.push({t,arr});$("analysisStatus").textContent=`Sampling frames ${i+1}/${samples}…`}
+  let changes=[];for(let i=1;i<frames.length;i++){let diff=0;for(let j=0;j<frames[i].arr.length;j++)diff+=Math.abs(frames[i].arr[j]-frames[i-1].arr[j]);diff/=frames[i].arr.length;if(diff>25)changes.push({t:frames[i].t,score:diff})}
+  // Keep spaced-out change candidates; fallback to regular segments.
+  let selected=[];for(const x of changes){if(x.t>0.6&&x.t<duration-0.4&&(!selected.length||x.t-selected[selected.length-1].t>1.25))selected.push(x)}
+  if(selected.length>24)selected=selected.sort((a,b)=>b.score-a.score).slice(0,24).sort((a,b)=>a.t-b.t);
+  let points=[0,...selected.map(x=>x.t),duration];if(points.length<4){let count=Math.min(8,Math.max(3,Math.round(duration/3)));points=Array.from({length:count+1},(_,i)=>duration*i/count)}
+  refCuts=[];for(let i=0;i<points.length-1;i++)refCuts.push({start:points[i],end:points[i+1],duration:points[i+1]-points[i]});
+  $("cutCount").textContent=refCuts.length;$("cuts").innerHTML=refCuts.map((x,i)=>`<div class="item"><span><b>Segment ${i+1}</b><br><small>${fmt(x.start)} → ${fmt(x.end)}</small></span><small>${x.duration.toFixed(1)} sec</small></div>`).join("");
+  $("analysisStatus").textContent=`Analysis complete. ${refCuts.length} approximate segments found. Visual sampling is a rough estimate, not guaranteed true scene detection.`;$("buildBtn").disabled=clips.length===0;
+ }catch(err){$("analysisStatus").textContent="Could not analyze this video: "+err.message}finally{btn.disabled=false}
+};
+function seek(v,t){return new Promise((resolve,reject)=>{let done=()=>{v.removeEventListener("seeked",done);resolve()};v.addEventListener("seeked",done,{once:true});v.currentTime=t;setTimeout(()=>{v.removeEventListener("seeked",done);resolve()},1800)})}
+$("clipsFile").addEventListener("change",async e=>{
+ const files=[...e.target.files];clips=[];$("clipsList").innerHTML="";for(let f of files){try{let m=await loadMeta(f);clips.push({file:f,url:URL.createObjectURL(f),duration:m.duration,width:m.width,height:m.height});$("clipsList").insertAdjacentHTML("beforeend",`<div class="item"><span>${f.name}<br><small>${fmt(m.duration)} · ${m.width}×${m.height} · ${prettyBytes(f.size)}</small></span></div>`)}catch(err){$("clipsList").insertAdjacentHTML("beforeend",`<div class="item"><span>${f.name}: ${err.message}</span></div>`)}}if(!clips.length)$("clipsList").innerHTML='<div class="hint">No readable clips selected.</div>';$("buildBtn").disabled=!(refCuts.length&&clips.length);$("previewBtn").disabled=true;$("exportBtn").disabled=true;
+});
+$("buildBtn").onclick=()=>{
+ if(!clips.length||!refCuts.length)return;plan=refCuts.map((seg,i)=>({duration:seg.duration,clip:clips[i%clips.length],index:i+1}));$("plan").innerHTML=plan.map(p=>`<div class="item"><span><b>Segment ${p.index}</b><br><small>${p.clip.file.name}</small></span><small>${p.duration.toFixed(1)} sec</small></div>`).join("");$("previewBtn").disabled=false;$("exportBtn").disabled=false;$("renderStatus").textContent=`Edit plan ready: ${fmt(plan.reduce((a,p)=>a+p.duration,0))} total. Clips repeat in order if there are fewer clips than segments.`;
+};
+async function renderVideo(isPreview){
+ if(rendering||!plan.length)return;rendering=true;$("exportBtn").disabled=true;$("previewBtn").disabled=true;$("progress").style.width="0%";$("renderStatus").textContent="Preparing render…";
+ const canvas=$("stage"),ctx=canvas.getContext("2d"),format=$("format").value,quality=+$("quality").value;
+ let w,h;if(format==="portrait"){w=quality;h=Math.round(quality*16/9)}else if(format==="landscape"){w=Math.round(quality*16/9);h=quality}else if(format==="square"){w=quality;h=quality}else{let r=refMeta.width/refMeta.height;if(r>=1){h=quality;w=Math.round(h*r)}else{w=quality;h=Math.round(w/r)}}
+ const maxSide=1080;if(Math.max(w,h)>maxSide){let s=maxSide/Math.max(w,h);w=Math.round(w*s);h=Math.round(h*s)}canvas.width=w;canvas.height=h;
+ const stream=canvas.captureStream(24);let recorder=null,chunks=[];try{if(!isPreview){if(!window.MediaRecorder)throw Error("MediaRecorder is not supported in this browser. Try current Chrome.");let mime=MediaRecorder.isTypeSupported("video/webm;codecs=vp9")?"video/webm;codecs=vp9":"video/webm";recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:2500000});recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};recorder.start(250)}}
+ catch(err){rendering=false;$("renderStatus").textContent=err.message;return}
+ const total=plan.reduce((a,p)=>a+p.duration,0);let elapsed=0;
+ try{
+  for(let i=0;i<plan.length;i++){let p=plan[i],v=document.createElement("video");v.src=p.clip.url;v.muted=true;v.playsInline=true;v.preload="auto";await new Promise((resolve,reject)=>{v.onloadedmetadata=resolve;v.onerror=()=>reject(Error("Could not decode "+p.clip.file.name));v.load()});
+   let start=0,remaining=v.duration;if(remaining>p.duration){start=0;remaining=p.duration}await seek(v,start);let segmentStart=performance.now(),durationMs=p.duration*1000;
+   await new Promise(resolve=>{function draw(now){let t=(now-segmentStart)/durationMs;if(t>=1){paint(v);elapsed+=p.duration;$("progress").style.width=Math.min(100,elapsed/total*100)+"%";resolve();return}paint(v);if(v.duration>p.duration+0.1){let target=start+t*Math.min(p.duration,v.duration);if(Math.abs(v.currentTime-target)>0.12)v.currentTime=target}requestAnimationFrame(draw)}requestAnimationFrame(draw)});
+   v.pause();
+  }
+  if(recorder){await new Promise(resolve=>{recorder.onstop=resolve;recorder.stop()});let blob=new Blob(chunks,{type:"video/webm"});if(outURL)URL.revokeObjectURL(outURL);outURL=URL.createObjectURL(blob);$("outputPreview").src=outURL;$("outputPreview").classList.remove("hidden");$("download").href=outURL;$("download").classList.remove("hidden");$("download").textContent=`Download video (${prettyBytes(blob.size)})`;$("renderStatus").textContent="Export finished. Video is silent WebM; tap Download video to save it."}
+  else $("renderStatus").textContent="Preview finished. Tap Export video to create a downloadable file.";
+ }catch(err){if(recorder&&recorder.state!=="inactive")recorder.stop();$("renderStatus").textContent="Render stopped: "+err.message+" Try fewer/smaller clips or 480p."}
+ finally{stream.getTracks().forEach(t=>t.stop());rendering=false;$("exportBtn").disabled=false;$("previewBtn").disabled=false}
+ function paint(v){ctx.fillStyle="#000";ctx.fillRect(0,0,w,h);let vw=v.videoWidth||w,vh=v.videoHeight||h;let scale=Math.max(w/vw,h/vh),dw=vw*scale,dh=vh*scale;ctx.drawImage(v,(w-dw)/2,(h-dh)/2,dw,dh)}
+}
+$("previewBtn").onclick=()=>renderVideo(true);$("exportBtn").onclick=()=>renderVideo(false);
+</script>
+</body>
+</html>
